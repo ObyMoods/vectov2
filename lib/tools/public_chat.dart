@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 // ==================== USER PROFILE PAGE ====================
 class UserProfilePage extends StatefulWidget {
@@ -349,6 +350,34 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 }
 
+// ==================== NOTIFICATION SERVICE ====================
+class NotificationService {
+  static final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+
+  static Future<void> initialize() async {
+    const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings settings = InitializationSettings(android: androidSettings);
+    await _notifications.initialize(settings);
+  }
+
+  static Future<void> showNotification(String title, String body) async {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'chat_channel',
+      'Chat Notifications',
+      channelDescription: 'Notifikasi pesan baru dari Public Lounge',
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: true,
+    );
+    const NotificationDetails details = NotificationDetails(android: androidDetails);
+    await _notifications.show(
+      DateTime.now().millisecond,
+      title,
+      body,
+      details,
+    );
+  }
+}
 
 // ==================== PUBLIC CHAT PAGE ====================
 class PublicChatPage extends StatefulWidget {
@@ -360,7 +389,7 @@ class PublicChatPage extends StatefulWidget {
   State<PublicChatPage> createState() => _PublicChatPageState();
 }
 
-class _PublicChatPageState extends State<PublicChatPage> {
+class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObserver {
   final String baseUrl = "http://suikaxmaxxxmangyannxbrock.cloudnesia.my.id:3323";
 
   final TextEditingController _msgController = TextEditingController();
@@ -369,6 +398,7 @@ class _PublicChatPageState extends State<PublicChatPage> {
   List<dynamic> _messages = [];
   Timer? _refreshTimer;
   bool _isSending = false;
+  int _lastMessageCount = 0;
   
   final AudioRecorder _recorder = AudioRecorder();
   bool _isRecording = false;
@@ -381,7 +411,6 @@ class _PublicChatPageState extends State<PublicChatPage> {
   String? _currentPlayingId;
   
   Map<String, dynamic>? _replyTo;
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   
   final String _adminKey = 'rahasiaadmin123';
   
@@ -396,12 +425,21 @@ class _PublicChatPageState extends State<PublicChatPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    NotificationService.initialize();
     _initRecorder();
     _requestPermissions();
     _fetchMessages();
     _refreshTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
       _fetchMessages();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _fetchMessages();
+    }
   }
 
   Future<void> _initRecorder() async {
@@ -419,6 +457,7 @@ class _PublicChatPageState extends State<PublicChatPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _msgController.dispose();
     _scrollController.dispose();
@@ -462,6 +501,27 @@ class _PublicChatPageState extends State<PublicChatPage> {
         if (data['success'] == true) {
           List newMsgs = data['messages'];
           bool shouldScroll = newMsgs.length > _messages.length;
+          
+          if (newMsgs.length > _lastMessageCount && _lastMessageCount > 0) {
+            final newMsg = newMsgs.firstWhere(
+              (msg) => !_messages.any((oldMsg) => oldMsg['id'] == msg['id']),
+              orElse: () => null,
+            );
+            if (newMsg != null && newMsg['username'] != widget.username) {
+              final String title = newMsg['username'];
+              String body = newMsg['message'] ?? '';
+              if (body.isEmpty) {
+                if (newMsg['media_type'] == 'image') body = '📷 Mengirim gambar';
+                else if (newMsg['media_type'] == 'video') body = '🎥 Mengirim video';
+                else if (newMsg['media_type'] == 'audio') body = '🎤 Mengirim pesan suara';
+                else if (newMsg['media_type'] == 'file') body = '📎 Mengirim file';
+                else body = 'Mengirim pesan';
+              }
+              NotificationService.showNotification(title, body);
+            }
+          }
+          
+          _lastMessageCount = newMsgs.length;
 
           if (mounted) {
             setState(() {
@@ -493,7 +553,17 @@ class _PublicChatPageState extends State<PublicChatPage> {
       if (_replyTo != null) {
         request.fields['reply_to_id'] = _replyTo!['id'].toString();
         request.fields['reply_to_username'] = _replyTo!['username'];
-        request.fields['reply_to_message'] = _replyTo!['message'] ?? '[Media]';
+        
+        String replyMessage = _replyTo!['message'] ?? '';
+        if (replyMessage.isEmpty) {
+          final replyMediaType = _replyTo!['media_type'] ?? '';
+          if (replyMediaType == 'image') replyMessage = '📷 Gambar';
+          else if (replyMediaType == 'video') replyMessage = '🎥 Video';
+          else if (replyMediaType == 'audio') replyMessage = '🎤 Pesan suara';
+          else if (replyMediaType == 'file') replyMessage = '📎 File';
+          else replyMessage = '[Media]';
+        }
+        request.fields['reply_to_message'] = replyMessage;
         setState(() => _replyTo = null);
       }
       
@@ -597,24 +667,6 @@ class _PublicChatPageState extends State<PublicChatPage> {
                 child: IconButton(
                   icon: const Icon(Icons.close, color: Colors.white, size: 30),
                   onPressed: () => Navigator.pop(context),
-                ),
-              ),
-              Positioned(
-                bottom: 20,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      "Tap to zoom • ${fullUrl.split('.').last.toUpperCase()}",
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ),
                 ),
               ),
             ],
@@ -735,7 +787,6 @@ class _PublicChatPageState extends State<PublicChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldKey,
       backgroundColor: _bgDark,
       body: SafeArea(
         child: Column(
@@ -750,7 +801,7 @@ class _PublicChatPageState extends State<PublicChatPage> {
                 itemBuilder: (context, index) {
                   final msg = _messages[index];
                   final isMe = msg['username'] == widget.username;
-                  final isAdmin = widget.role == 'admin';
+                  final isAdmin = widget.role == 'admin' || widget.role == 'owner';
                   return Dismissible(
                     key: Key(msg['id'].toString()),
                     direction: DismissDirection.startToEnd,
@@ -768,13 +819,15 @@ class _PublicChatPageState extends State<PublicChatPage> {
                         _replyTo = {
                           'id': msg['id'],
                           'username': msg['username'],
-                          'message': msg['message'] ?? '[Media]',
+                          'message': msg['message'] ?? '',
+                          'media_type': msg['media_type'] ?? '',
+                          'media_url': msg['media_url'] ?? '',
                         };
                       });
                       _scrollToBottom();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text("Replying to ${msg['username']}"),
+                          content: Text("Membalas ${msg['username']}"),
                           duration: const Duration(seconds: 1),
                           backgroundColor: _primaryPink,
                         ),
@@ -794,6 +847,16 @@ class _PublicChatPageState extends State<PublicChatPage> {
   }
 
   Widget _buildReplyBar() {
+    String replyPreview = _replyTo!['message'] ?? '';
+    if (replyPreview.isEmpty) {
+      final mediaType = _replyTo!['media_type'] ?? '';
+      if (mediaType == 'image') replyPreview = '📷 Gambar';
+      else if (mediaType == 'video') replyPreview = '🎥 Video';
+      else if (mediaType == 'audio') replyPreview = '🎤 Pesan suara';
+      else if (mediaType == 'file') replyPreview = '📎 File';
+      else replyPreview = '[Media]';
+    }
+    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -804,16 +867,16 @@ class _PublicChatPageState extends State<PublicChatPage> {
       ),
       child: Row(
         children: [
-          Icon(Icons.reply, color: _primaryPink, size: 16),
+          const Icon(Icons.reply, color: Color(0xFFFF4081), size: 16),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Replying to ${_replyTo!['username']}", 
-                  style: TextStyle(color: _primaryPink, fontSize: 10)),
-                Text(_replyTo!['message']?.toString() ?? '[Media]', 
-                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                Text("Membalas ${_replyTo!['username']}", 
+                  style: const TextStyle(color: Color(0xFFFF4081), fontSize: 10, fontWeight: FontWeight.w500)),
+                Text(replyPreview, 
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -864,9 +927,11 @@ class _PublicChatPageState extends State<PublicChatPage> {
   }
 
   Widget _buildChatBubble(dynamic msg, bool isMe, bool isAdmin) {
-    final hasMedia = msg['media_url'] != null && msg['media_url'].isNotEmpty;
+    final hasMedia = msg['media_url'] != null && msg['media_url'].toString().isNotEmpty;
     final mediaType = msg['media_type'] ?? '';
     final hasReply = msg['reply_to'] != null;
+    
+    final displayName = isMe ? "Anda" : msg['username'];
     
     return GestureDetector(
       onLongPress: () {
@@ -879,7 +944,7 @@ class _PublicChatPageState extends State<PublicChatPage> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 12),
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.85,
+            maxWidth: MediaQuery.of(context).size.width * 0.80,
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -928,11 +993,11 @@ class _PublicChatPageState extends State<PublicChatPage> {
                         child: GestureDetector(
                           onTap: () => _navigateToProfile(msg['username']),
                           child: Text(
-                            msg['username'],
+                            displayName,
                             style: TextStyle(
                               color: _softPink,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
@@ -943,8 +1008,8 @@ class _PublicChatPageState extends State<PublicChatPage> {
                         margin: const EdgeInsets.only(bottom: 6),
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(10),
+                          color: Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(12),
                           border: Border(left: BorderSide(color: _primaryPink, width: 3)),
                         ),
                         child: Column(
@@ -955,15 +1020,15 @@ class _PublicChatPageState extends State<PublicChatPage> {
                               style: TextStyle(
                                 color: _primaryPink,
                                 fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               msg['reply_to']['message'] ?? '[Media]',
                               style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
+                                color: Colors.white60,
+                                fontSize: 11,
                               ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -973,33 +1038,39 @@ class _PublicChatPageState extends State<PublicChatPage> {
                       ),
                     
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      constraints: BoxConstraints(
+                        minWidth: 60,
+                        maxWidth: MediaQuery.of(context).size.width * 0.70,
+                      ),
                       decoration: BoxDecoration(
                         color: isMe ? _bubbleMe : _bubbleOther,
                         borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(20),
-                          topRight: const Radius.circular(20),
-                          bottomLeft: Radius.circular(isMe ? 20 : 5),
-                          bottomRight: Radius.circular(isMe ? 5 : 20),
+                          topLeft: const Radius.circular(18),
+                          topRight: const Radius.circular(18),
+                          bottomLeft: Radius.circular(isMe ? 18 : 4),
+                          bottomRight: Radius.circular(isMe ? 4 : 18),
                         ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (msg['message'] != null && msg['message'].toString().isNotEmpty)
-                            Text(msg['message'], style: const TextStyle(color: Colors.white, fontSize: 14)),
+                            Text(msg['message'], 
+                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                            ),
                           
                           if (hasMedia) _buildMediaContent(msg, mediaType),
                           
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(msg['time'] ?? "", 
-                                style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 10)),
+                                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 10)),
                               if (isMe)
                                 Padding(
-                                  padding: const EdgeInsets.only(left: 8),
+                                  padding: const EdgeInsets.only(left: 6),
                                   child: Icon(Icons.done_all, color: Colors.white38, size: 12),
                                 ),
                             ],
@@ -1059,23 +1130,26 @@ class _PublicChatPageState extends State<PublicChatPage> {
       return GestureDetector(
         onTap: () => _showImageFullscreen(mediaUrl),
         child: Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.only(top: 6),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             child: Image.network(
               fullUrl,
-              width: double.infinity,
+              width: 220,
+              height: 200,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => Container(
+                width: 220,
                 height: 200,
                 color: Colors.grey[900],
                 child: const Center(
-                  child: Icon(Icons.broken_image, color: Colors.white54, size: 50),
+                  child: Icon(Icons.broken_image, color: Colors.white54, size: 40),
                 ),
               ),
               loadingBuilder: (context, child, loadingProgress) {
                 if (loadingProgress == null) return child;
                 return Container(
+                  width: 220,
                   height: 200,
                   color: Colors.grey[900],
                   child: const Center(
@@ -1091,33 +1165,28 @@ class _PublicChatPageState extends State<PublicChatPage> {
       return GestureDetector(
         onTap: () => _showVideoPlayer(mediaUrl),
         child: Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.only(top: 6),
           child: Container(
-            height: 200,
-            width: double.infinity,
+            width: 220,
+            height: 150,
             decoration: BoxDecoration(
-              color: Colors.black26,
-              borderRadius: BorderRadius.circular(16),
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Stack(
               alignment: Alignment.center,
               children: [
-                Container(
-                  color: Colors.black45,
-                  child: const Center(
-                    child: Icon(Icons.play_circle_filled, color: Colors.white, size: 60),
-                  ),
-                ),
+                const Icon(Icons.play_circle_filled, color: Colors.white, size: 50),
                 Positioned(
                   bottom: 8,
                   right: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.black54,
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Text("Video", style: TextStyle(color: Colors.white, fontSize: 11)),
+                    child: const Text("Video", style: TextStyle(color: Colors.white, fontSize: 10)),
                   ),
                 ),
               ],
@@ -1128,9 +1197,10 @@ class _PublicChatPageState extends State<PublicChatPage> {
     } else if (mediaType == 'audio') {
       final isPlaying = _currentPlayingId == mediaUrl;
       return Padding(
-        padding: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.only(top: 6),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          width: 220,
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: Colors.black26,
             borderRadius: BorderRadius.circular(12),
@@ -1142,28 +1212,26 @@ class _PublicChatPageState extends State<PublicChatPage> {
                 child: Icon(
                   isPlaying ? Icons.stop_circle : Icons.play_circle_filled,
                   color: _primaryPink,
-                  size: 40,
+                  size: 36,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(msg['file_name'] ?? "Voice Message",
-                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    Text(msg['file_name'] ?? "Pesan suara",
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (isPlaying)
-                      const SizedBox(height: 4),
-                    if (isPlaying)
-                      LinearProgressIndicator(color: _primaryPink),
+                      const LinearProgressIndicator(color: Color(0xFFFF4081)),
                   ],
                 ),
               ),
               GestureDetector(
                 onTap: () => _downloadFile(mediaUrl, msg['file_name'] ?? 'audio.m4a'),
-                child: const Icon(Icons.download, color: Colors.white54, size: 24),
+                child: const Icon(Icons.download, color: Colors.white54, size: 20),
               ),
             ],
           ),
@@ -1171,24 +1239,25 @@ class _PublicChatPageState extends State<PublicChatPage> {
       );
     } else {
       return Padding(
-        padding: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.only(top: 6),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          width: 220,
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: Colors.black26,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
-              const Icon(Icons.insert_drive_file, color: Colors.white, size: 28),
-              const SizedBox(width: 12),
+              const Icon(Icons.insert_drive_file, color: Colors.white, size: 24),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       msg['file_name'] ?? "File",
-                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (msg['file_size'] != null)
@@ -1201,7 +1270,7 @@ class _PublicChatPageState extends State<PublicChatPage> {
               ),
               GestureDetector(
                 onTap: () => _downloadFile(mediaUrl, msg['file_name'] ?? 'file'),
-                child: const Icon(Icons.download, color: Colors.white54, size: 24),
+                child: const Icon(Icons.download, color: Colors.white54, size: 20),
               ),
             ],
           ),
@@ -1300,7 +1369,7 @@ class _PublicChatPageState extends State<PublicChatPage> {
                 style: const TextStyle(color: Colors.white),
                 cursorColor: _primaryPink,
                 decoration: InputDecoration(
-                  hintText: "Type a message...",
+                  hintText: "Ketik pesan...",
                   hintStyle: TextStyle(color: _softPink.withOpacity(0.4)),
                   border: InputBorder.none,
                 ),
