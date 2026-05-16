@@ -14,7 +14,7 @@ dependencies:
   archive: ^3.4.0
   process_run: ^1.1.0
   animations: ^2.0.11
-  ssh2: ^2.1.0
+  dart_ssh: ^0.0.4
   url_launcher: ^6.2.6
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.2.2
