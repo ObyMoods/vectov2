@@ -1,58 +1,54 @@
-name: Build APK
+name: Build Flutter APK
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-android:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/setup-java@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      
-      - uses: subosito/flutter-action@v2
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
           channel: 'stable'
-      
-      - name: Fix pubspec.yaml SDK version
-        run: |
-          # Turunkan versi SDK agar kompatibel dengan Dart 3.4.0
-          sed -i 's/sdk: ^3.8.1/sdk: ">=3.0.0 <4.0.0"/' pubspec.yaml
-          echo "✅ Fixed SDK version"
-      
+          cache: true
+
       - name: Get dependencies
         run: flutter pub get
-      
-      - name: Patch ssh2 package
-        run: |
-          # Patch semua file ssh2 yang ditemukan setelah pub get
-          find ~/.pub-cache/hosted/pub.dev -type d -name "ssh2-*" 2>/dev/null | while read dir; do
-            if [ -f "$dir/android/build.gradle" ]; then
-              echo "Patching: $dir/android/build.gradle"
-              # Cek apakah sudah ada namespace
-              if ! grep -q "namespace" "$dir/android/build.gradle"; then
-                sed -i 's/android {/android {\n    namespace "com.github.ssh2"/' "$dir/android/build.gradle"
-                echo "✅ Patched: $dir"
-              else
-                echo "✅ Already patched: $dir"
-              fi
-            fi
-          done
-      
+
       - name: Build APK
+        run: flutter build apk --release
+
+      - name: Generate debug keystore
         run: |
-          flutter clean
-          flutter pub get
-          flutter build apk --release --no-tree-shake-icons
-      
+          keytool -genkey -v -keystore debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, ST=Debug, C=ID"
+
+      - name: Sign APK
+        run: |
+          jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 \
+            -keystore debug.keystore -storepass android -keypass android \
+            build/app/outputs/flutter-apk/app-release.apk androiddebugkey
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
+          name: app-release-signed
           path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
