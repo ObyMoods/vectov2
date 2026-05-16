@@ -56,7 +56,7 @@ class _YouTubeSState extends State<YouTubeS> {
       }
     });
 
-    _audioPlayer.onComplete.listen((event) {
+    _audioPlayer.onPlayerComplete.listen((event) {
       if (mounted && _searchResults.isNotEmpty && _currentTrackIndex < _searchResults.length - 1) {
         _playNextTrack();
       }
