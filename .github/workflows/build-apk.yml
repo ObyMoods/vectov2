@@ -18,17 +18,30 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.0'
+          channel: 'stable'
+      
+      - name: Fix pubspec.yaml SDK version
+        run: |
+          # Turunkan versi SDK agar kompatibel dengan Dart 3.4.0
+          sed -i 's/sdk: ^3.8.1/sdk: ">=3.0.0 <4.0.0"/' pubspec.yaml
+          echo "✅ Fixed SDK version"
+      
+      - name: Get dependencies
+        run: flutter pub get
       
       - name: Patch ssh2 package
         run: |
-          # Install dependencies terlebih dahulu
-          flutter pub get || true
-          
-          # Patch semua file ssh2 yang ditemukan
+          # Patch semua file ssh2 yang ditemukan setelah pub get
           find ~/.pub-cache/hosted/pub.dev -type d -name "ssh2-*" 2>/dev/null | while read dir; do
             if [ -f "$dir/android/build.gradle" ]; then
               echo "Patching: $dir/android/build.gradle"
-              sed -i 's/android {/android {\n    namespace "com.github.ssh2"/' "$dir/android/build.gradle"
+              # Cek apakah sudah ada namespace
+              if ! grep -q "namespace" "$dir/android/build.gradle"; then
+                sed -i 's/android {/android {\n    namespace "com.github.ssh2"/' "$dir/android/build.gradle"
+                echo "✅ Patched: $dir"
+              else
+                echo "✅ Already patched: $dir"
+              fi
             fi
           done
       
@@ -36,7 +49,7 @@ jobs:
         run: |
           flutter clean
           flutter pub get
-          flutter build apk --release
+          flutter build apk --release --no-tree-shake-icons
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
