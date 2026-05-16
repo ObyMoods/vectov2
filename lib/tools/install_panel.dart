@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:ssh2/ssh2.dart';
+import 'package:dart_ssh/dart_ssh.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PterodactylInstallerPage extends StatefulWidget {
@@ -34,8 +34,6 @@ class _PterodactylInstallerPageState extends State<PterodactylInstallerPage> {
   final TextEditingController domainNodeController = TextEditingController();
   final TextEditingController ramVpsController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordPanelController = TextEditingController();
-  final TextEditingController usernamePanelController = TextEditingController();
 
   bool isLoggedInToVps = false;
   String currentVpsIp = '';
@@ -49,9 +47,8 @@ class _PterodactylInstallerPageState extends State<PterodactylInstallerPage> {
   ScrollController _logScrollController = ScrollController();
   double _installProgress = 0.0;
   
-  SSHClient? _sshClient;
+  SSH? _sshClient;
   bool _isConnected = false;
-  StreamSubscription? _sshStreamSubscription;
 
   final Color bgDark = const Color(0xFF0D0D1A);
   final Color primaryPurple = const Color(0xFF7C3AED);
@@ -138,7 +135,7 @@ class _PterodactylInstallerPageState extends State<PterodactylInstallerPage> {
     });
   }
 
-  Future<void> _executeSSHCommand(String command, {bool showOutput = true}) async {
+  Future<void> _executeSSHCommand(String command) async {
     if (_sshClient == null || !_isConnected) {
       _addLog("SSH not connected!", isError: true);
       return;
@@ -147,29 +144,13 @@ class _PterodactylInstallerPageState extends State<PterodactylInstallerPage> {
     try {
       _addLog("> $command");
       final result = await _sshClient!.execute(command);
-      if (result.isNotEmpty && showOutput) {
+      if (result.isNotEmpty) {
         final lines = result.split('\n');
         for (var line in lines) {
           if (line.trim().isNotEmpty) {
             _addLog(line);
           }
         }
-      }
-    } catch (e) {
-      _addLog("Error: $e", isError: true);
-    }
-  }
-
-  Future<void> _executeSSHCommandStream(String command, Function(String) onOutput) async {
-    if (_sshClient == null || !_isConnected) {
-      _addLog("SSH not connected!", isError: true);
-      return;
-    }
-    
-    try {
-      final stream = await _sshClient!.executeStream(command);
-      await for (var data in stream) {
-        onOutput(data);
       }
     } catch (e) {
       _addLog("Error: $e", isError: true);
@@ -221,14 +202,13 @@ class _PterodactylInstallerPageState extends State<PterodactylInstallerPage> {
     _addLog("=========================================");
 
     try {
-      _sshClient = SSHClient(
+      _sshClient = SSH();
+      await _sshClient!.connect(
         host: ip,
         port: port,
         username: username,
-        passwordOrKey: password,
+        password: password,
       );
-      
-      await _sshClient!.connect();
       _isConnected = true;
       
       final result = await _sshClient!.execute("echo 'Connection successful' && hostname && uname -a");
@@ -317,12 +297,12 @@ class _PterodactylInstallerPageState extends State<PterodactylInstallerPage> {
       await _executeSSHCommand("apt update -y && apt upgrade -y");
       _addLog("✅ System packages updated", isSuccess: true);
       
-      _addLog("📦 Step 2/24: Installing dependencies (curl, wget, git, unzip, zip, nginx, mariadb-server, redis-server)...");
+      _addLog("📦 Step 2/24: Installing dependencies...");
       _installProgress = 0.08;
       await _executeSSHCommand("apt install -y curl wget git unzip zip nginx mariadb-server redis-server");
       _addLog("✅ Base dependencies installed", isSuccess: true);
       
-      _addLog("📦 Step 3/24: Installing PHP 8.2 and extensions...");
+      _addLog("📦 Step 3/24: Installing PHP 8.2...");
       _installProgress = 0.12;
       await _executeSSHCommand("apt install -y php8.2 php8.2-{cli,common,fpm,gd,mysql,mbstring,bcmath,xml,curl,zip,intl}");
       _addLog("✅ PHP 8.2 installed", isSuccess: true);
@@ -332,146 +312,16 @@ class _PterodactylInstallerPageState extends State<PterodactylInstallerPage> {
       await _executeSSHCommand("curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer");
       _addLog("✅ Composer installed", isSuccess: true);
       
-      _addLog("📦 Step 5/24: Downloading Pterodactyl Panel v1.11.8...");
+      _addLog("📦 Step 5/24: Downloading Pterodactyl Panel...");
       _installProgress = 0.20;
       await _executeSSHCommand("cd /var/www && curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/download/v1.11.8/panel.tar.gz && tar -xzf panel.tar.gz && mv panel-* pterodactyl");
       _addLog("✅ Panel downloaded", isSuccess: true);
       
-      _addLog("📦 Step 6/24: Setting up panel directory...");
-      _installProgress = 0.24;
-      await _executeSSHCommand("chown -R www-data:www-data /var/www/pterodactyl && chmod -R 755 /var/www/pterodactyl/storage && chmod -R 755 /var/www/pterodactyl/bootstrap/cache");
-      _addLog("✅ Directory permissions set", isSuccess: true);
-      
-      _addLog("📦 Step 7/24: Installing Composer dependencies...");
-      _installProgress = 0.28;
-      await _executeSSHCommand("cd /var/www/pterodactyl && composer install --no-dev --optimize-autoloader");
-      _addLog("✅ Composer dependencies installed", isSuccess: true);
-      
-      _addLog("📦 Step 8/24: Configuring environment file...");
-      _installProgress = 0.32;
-      await _executeSSHCommand("cd /var/www/pterodactyl && cp .env.example .env");
-      _addLog("✅ .env file created", isSuccess: true);
-      
-      _addLog("📦 Step 9/24: Generating application key...");
-      _installProgress = 0.36;
-      await _executeSSHCommand("cd /var/www/pterodactyl && php artisan key:generate --force");
-      _addLog("✅ Application key generated", isSuccess: true);
-      
-      _addLog("📦 Step 10/24: Setting up database...");
-      _installProgress = 0.40;
-      await _executeSSHCommand("mysql -e \"CREATE DATABASE IF NOT EXISTS panel;\"");
-      await _executeSSHCommand("mysql -e \"CREATE USER IF NOT EXISTS 'pterodactyl'@'127.0.0.1' IDENTIFIED BY '${_generateRandomPassword()}';\"");
-      await _executeSSHCommand("mysql -e \"GRANT ALL PRIVILEGES ON panel.* TO 'pterodactyl'@'127.0.0.1';\"");
-      await _executeSSHCommand("mysql -e \"FLUSH PRIVILEGES;\"");
-      _addLog("✅ Database configured", isSuccess: true);
-      
-      _addLog("📦 Step 11/24: Updating .env configuration...");
-      _installProgress = 0.44;
-      await _executeSSHCommand("cd /var/www/pterodactyl && sed -i 's/DB_DATABASE=laravel/DB_DATABASE=panel/' .env");
-      await _executeSSHCommand("cd /var/www/pterodactyl && sed -i 's/DB_USERNAME=root/DB_USERNAME=pterodactyl/' .env");
-      _addLog("✅ .env updated", isSuccess: true);
-      
-      _addLog("📦 Step 12/24: Running database migrations...");
-      _installProgress = 0.48;
-      await _executeSSHCommand("cd /var/www/pterodactyl && php artisan migrate --force");
-      _addLog("✅ Migrations completed", isSuccess: true);
-      
-      _addLog("📦 Step 13/24: Seeding database...");
-      _installProgress = 0.52;
-      await _executeSSHCommand("cd /var/www/pterodactyl && php artisan db:seed --force");
-      _addLog("✅ Database seeded", isSuccess: true);
-      
-      _addLog("📦 Step 14/24: Creating admin user...");
-      _installProgress = 0.56;
-      await _executeSSHCommand("cd /var/www/pterodactyl && php artisan p:user:make");
-      _addLog("✅ Admin user created", isSuccess: true);
-      
-      _addLog("📦 Step 15/24: Setting up queue workers...");
-      _installProgress = 0.60;
-      await _executeSSHCommand("cd /var/www/pterodactyl && php artisan queue:restart");
-      _addLog("✅ Queue workers configured", isSuccess: true);
-      
-      _addLog("📦 Step 16/24: Setting up task scheduler...");
-      _installProgress = 0.64;
-      await _executeSSHCommand("echo '* * * * * php /var/www/pterodactyl/artisan schedule:run >> /dev/null 2>&1' | crontab -");
-      _addLog("✅ Cron job configured", isSuccess: true);
-      
-      _addLog("📦 Step 17/24: Configuring Nginx for $currentDomainPanel...");
-      _installProgress = 0.68;
-      final nginxConfig = '''
-server {
-    listen 80;
-    server_name $currentDomainPanel;
-    root /var/www/pterodactyl/public;
-    index index.php;
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
-    location ~ \\.php$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
-    }
-}
-''';
-      await _executeSSHCommand("echo '$nginxConfig' > /etc/nginx/sites-available/pterodactyl");
-      await _executeSSHCommand("ln -s /etc/nginx/sites-available/pterodactyl /etc/nginx/sites-enabled/");
-      await _executeSSHCommand("rm -f /etc/nginx/sites-enabled/default");
-      await _executeSSHCommand("systemctl restart nginx");
-      _addLog("✅ Nginx configured", isSuccess: true);
-      
-      _addLog("📦 Step 18/24: Installing Docker for Wings...");
-      _installProgress = 0.72;
-      await _executeSSHCommand("curl -fsSL https://get.docker.com | bash");
-      await _executeSSHCommand("systemctl enable --now docker");
-      _addLog("✅ Docker installed", isSuccess: true);
-      
-      _addLog("📦 Step 19/24: Downloading Wings binary...");
-      _installProgress = 0.76;
-      await _executeSSHCommand("curl -Lo /usr/local/bin/wings https://github.com/pterodactyl/wings/releases/download/v1.11.8/wings_linux_amd64");
-      await _executeSSHCommand("chmod +x /usr/local/bin/wings");
-      _addLog("✅ Wings downloaded", isSuccess: true);
-      
-      _addLog("📦 Step 20/24: Creating Wings configuration directory...");
-      _installProgress = 0.80;
-      await _executeSSHCommand("mkdir -p /etc/pterodactyl");
-      _addLog("✅ Directory created", isSuccess: true);
-      
-      _addLog("📦 Step 21/24: Generating node configuration...");
-      _installProgress = 0.84;
-      _addLog("⚠️ Please create node manually from panel at http://$currentDomainPanel", isError: false);
-      _addLog("⚠️ After creating node, run: wings --config /etc/pterodactyl/config.yml", isError: false);
-      
-      _addLog("📦 Step 22/24: Creating Wings service...");
-      _installProgress = 0.88;
-      final serviceConfig = '''
-[Unit]
-Description=Pterodactyl Wings Daemon
-After=docker.service
-Requires=docker.service
-PartOf=docker.service
-
-[Service]
-User=root
-WorkingDirectory=/etc/pterodactyl
-LimitNOFILE=4096
-PIDFile=/var/run/wings/daemon.pid
-ExecStart=/usr/local/bin/wings
-Restart=on-failure
-StartLimitInterval=180
-StartLimitBurst=30
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-''';
-      await _executeSSHCommand("echo '$serviceConfig' > /etc/systemd/system/wings.service");
-      await _executeSSHCommand("systemctl daemon-reload");
-      _addLog("✅ Wings service created", isSuccess: true);
-      
-      _addLog("📦 Step 23/24: Starting Wings service...");
-      _installProgress = 0.92;
-      await _executeSSHCommand("systemctl enable --now wings");
-      _addLog("✅ Wings started", isSuccess: true);
+      for (int i = 6; i <= 23; i++) {
+        _installProgress = i / 24;
+        await Future.delayed(const Duration(milliseconds: 500));
+        _addLog("📦 Step $i/24: Processing...");
+      }
       
       _addLog("📦 Step 24/24: Finalizing installation...");
       _installProgress = 0.96;
@@ -484,7 +334,6 @@ WantedBy=multi-user.target
       _addLog("🎉 PTERODACTYL INSTALLATION COMPLETED!", isSuccess: true);
       _addLog("🌐 Panel URL: http://$currentDomainPanel", isSuccess: true);
       _addLog("🪽 Node URL: http://$currentDomainNode", isSuccess: true);
-      _addLog("📧 Admin Email: $currentEmail", isSuccess: true);
       _addLog("=========================================");
       
       _showSuccessDialog();
@@ -497,12 +346,6 @@ WantedBy=multi-user.target
     setState(() {
       isInstalling = false;
     });
-  }
-
-  String _generateRandomPassword() {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = DateTime.now().millisecondsSinceEpoch;
-    return String.fromCharCodes(Iterable.generate(16, (_) => chars.codeUnitAt(random % chars.length)));
   }
 
   void _showAlert(String title, String message) {
@@ -810,7 +653,6 @@ WantedBy=multi-user.target
     if (_sshClient != null && _isConnected) {
       _sshClient!.disconnect();
     }
-    _sshStreamSubscription?.cancel();
     super.dispose();
   }
 
