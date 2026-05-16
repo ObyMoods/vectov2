@@ -379,7 +379,7 @@ class NotificationService {
   }
 }
 
-// ==================== PUBLIC CHAT PAGE ====================
+// ==================== PUBLIC CHAT PAGE (TAMPILAN WHATSAPP) ====================
 class PublicChatPage extends StatefulWidget {
   final String username;
   final String? role;
@@ -416,11 +416,14 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
   
   final Map<String, String?> _avatarCache = {};
 
-  final Color _primaryPink = const Color(0xFFFF4081);
-  final Color _softPink = const Color(0xFFFF80AB);
-  final Color _bgDark = const Color(0xFF120509);
-  final Color _bubbleMe = const Color(0xFFFF4081).withOpacity(0.8);
-  final Color _bubbleOther = const Color(0xFF2C2C2C);
+  // Warna untuk tampilan seperti WhatsApp
+  final Color _whatsappGreen = const Color(0xFF25D366);
+  final Color _whatsappBg = const Color(0xFF121212);
+  final Color _bubbleMe = const Color(0xFF075E54);  // Hijau gelap untuk pesan sendiri
+  final Color _bubbleOther = const Color(0xFF262626);  // Abu-abu untuk pesan lain
+  final Color _bubbleTextMe = Colors.white;
+  final Color _bubbleTextOther = Colors.white;
+  final Color _softPink = const Color(0xFF25D366);
 
   @override
   void initState() {
@@ -551,21 +554,21 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
       }
       
       if (_replyTo != null) {
-        request.fields['reply_to_id'] = _replyTo!['id'].toString();
-        request.fields['reply_to_username'] = _replyTo!['username'];
-        
-        String replyMessage = _replyTo!['message'] ?? '';
-        if (replyMessage.isEmpty) {
-          final replyMediaType = _replyTo!['media_type'] ?? '';
-          if (replyMediaType == 'image') replyMessage = '📷 Gambar';
-          else if (replyMediaType == 'video') replyMessage = '🎥 Video';
-          else if (replyMediaType == 'audio') replyMessage = '🎤 Pesan suara';
-          else if (replyMediaType == 'file') replyMessage = '📎 File';
-          else replyMessage = '[Media]';
-        }
-        request.fields['reply_to_message'] = replyMessage;
-        setState(() => _replyTo = null);
-      }
+  request.fields['reply_to_id'] = _replyTo!['id'].toString();
+  request.fields['reply_to_username'] = _replyTo!['username'];
+  
+  String replyMessage = _replyTo!['message'] ?? '';
+  if (replyMessage.isEmpty) {
+    final replyMediaType = _replyTo!['media_type'] ?? '';
+    if (replyMediaType == 'image') replyMessage = '📷 Gambar';
+    else if (replyMediaType == 'video') replyMessage = '🎥 Video';
+    else if (replyMediaType == 'audio') replyMessage = '🎤 Pesan suara';
+    else if (replyMediaType == 'file') replyMessage = '📎 File';
+    else replyMessage = '[Media]';
+  }
+  request.fields['reply_to_message'] = replyMessage;
+  setState(() => _replyTo = null);
+}
       
       if (mediaPath != null && File(mediaPath).existsSync()) {
         request.files.add(
@@ -787,7 +790,7 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bgDark,
+      backgroundColor: _whatsappBg,
       body: SafeArea(
         child: Column(
           children: [
@@ -796,45 +799,45 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 itemCount: _messages.length,
                 itemBuilder: (context, index) {
                   final msg = _messages[index];
                   final isMe = msg['username'] == widget.username;
                   final isAdmin = widget.role == 'admin' || widget.role == 'owner';
                   return Dismissible(
-                    key: Key(msg['id'].toString()),
-                    direction: DismissDirection.startToEnd,
-                    background: Container(
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.only(left: 20),
-                      decoration: BoxDecoration(
-                        color: _primaryPink,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.reply, color: Colors.white, size: 30),
-                    ),
-                    onDismissed: (direction) {
-                      setState(() {
-                        _replyTo = {
-                          'id': msg['id'],
-                          'username': msg['username'],
-                          'message': msg['message'] ?? '',
-                          'media_type': msg['media_type'] ?? '',
-                          'media_url': msg['media_url'] ?? '',
-                        };
-                      });
-                      _scrollToBottom();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text("Membalas ${msg['username']}"),
-                          duration: const Duration(seconds: 1),
-                          backgroundColor: _primaryPink,
-                        ),
-                      );
-                    },
-                    child: _buildChatBubble(msg, isMe, isAdmin),
-                  );
+  key: Key(msg['id'].toString()),
+  direction: DismissDirection.startToEnd,  // Geser dari kiri ke kanan
+  background: Container(
+    alignment: Alignment.centerLeft,
+    padding: const EdgeInsets.only(left: 20),
+    decoration: BoxDecoration(
+      color: _whatsappGreen,
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: const Icon(Icons.reply, color: Colors.white, size: 24),
+  ),
+  onDismissed: (direction) {
+    setState(() {
+      _replyTo = {
+        'id': msg['id'],
+        'username': msg['username'],
+        'message': msg['message'] ?? '',
+        'media_type': msg['media_type'] ?? '',
+        'media_url': msg['media_url'] ?? '',
+      };
+    });
+    _scrollToBottom();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Membalas ${msg['username']}"),
+        duration: const Duration(seconds: 1),
+        backgroundColor: _whatsappGreen,
+      ),
+    );
+  },
+  child: _buildChatBubble(msg, isMe, isAdmin),
+);
                 },
               ),
             ),
@@ -847,76 +850,77 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
   }
 
   Widget _buildReplyBar() {
-    String replyPreview = _replyTo!['message'] ?? '';
-    if (replyPreview.isEmpty) {
-      final mediaType = _replyTo!['media_type'] ?? '';
-      if (mediaType == 'image') replyPreview = '📷 Gambar';
-      else if (mediaType == 'video') replyPreview = '🎥 Video';
-      else if (mediaType == 'audio') replyPreview = '🎤 Pesan suara';
-      else if (mediaType == 'file') replyPreview = '📎 File';
-      else replyPreview = '[Media]';
-    }
-    
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: _primaryPink.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border(left: BorderSide(color: _primaryPink, width: 4)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.reply, color: Color(0xFFFF4081), size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("Membalas ${_replyTo!['username']}", 
-                  style: const TextStyle(color: Color(0xFFFF4081), fontSize: 10, fontWeight: FontWeight.w500)),
-                Text(replyPreview, 
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: () => setState(() => _replyTo = null),
-            child: const Icon(Icons.close, color: Colors.white54, size: 16),
-          ),
-        ],
-      ),
-    );
+  String replyPreview = _replyTo!['message'] ?? '';
+  if (replyPreview.isEmpty) {
+    final mediaType = _replyTo!['media_type'] ?? '';
+    if (mediaType == 'image') replyPreview = '📷 Gambar';
+    else if (mediaType == 'video') replyPreview = '🎥 Video';
+    else if (mediaType == 'audio') replyPreview = '🎤 Pesan suara';
+    else if (mediaType == 'file') replyPreview = '📎 File';
+    else replyPreview = '[Media]';
   }
+  
+  return Container(
+    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: BoxDecoration(
+      color: _whatsappGreen.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(12),
+      border: Border(left: BorderSide(color: _whatsappGreen, width: 4)),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.reply, color: Color(0xFF25D366), size: 16),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Membalas ${_replyTo!['username']}", 
+                style: const TextStyle(color: Color(0xFF25D366), fontSize: 10, fontWeight: FontWeight.w500)),
+              Text(replyPreview, 
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        GestureDetector(
+          onTap: () => setState(() => _replyTo = null),
+          child: const Icon(Icons.close, color: Colors.white54, size: 16),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      decoration: BoxDecoration(
-        color: _bgDark,
-        border: Border(bottom: BorderSide(color: _primaryPink.withOpacity(0.3))),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: _whatsappBg,
       child: Row(
         children: [
           GestureDetector(
             onTap: () => Navigator.pop(context),
-            child: Icon(Icons.arrow_back_rounded, color: _softPink),
+            child: const Icon(Icons.arrow_back_rounded, color: Color(0xFF25D366)),
           ),
           const SizedBox(width: 15),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("PUBLIC LOUNGE", 
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                "PUBLIC LOUNGE", 
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)
+              ),
               Row(
                 children: [
-                  Container(width: 8, height: 8, decoration: BoxDecoration(color: _primaryPink, shape: BoxShape.circle)),
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: _whatsappGreen, shape: BoxShape.circle)),
                   const SizedBox(width: 6),
-                  Text("Live • ${_messages.length} messages", 
-                    style: TextStyle(color: _softPink.withOpacity(0.7), fontSize: 11)),
+                  Text(
+                    "Live • ${_messages.length} messages", 
+                    style: TextStyle(color: _whatsappGreen.withOpacity(0.7), fontSize: 11)
+                  ),
                 ],
               ),
             ],
@@ -931,7 +935,8 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
     final mediaType = msg['media_type'] ?? '';
     final hasReply = msg['reply_to'] != null;
     
-    final displayName = isMe ? "Anda" : msg['username'];
+    final displayName = msg['username'];
+    final timeStr = msg['time'] ?? "";
     
     return GestureDetector(
       onLongPress: () {
@@ -942,179 +947,111 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
       child: Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 12),
+          margin: const EdgeInsets.only(bottom: 8),
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.80,
+            maxWidth: MediaQuery.of(context).size.width * 0.75,
           ),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Nama pengirim (hanya untuk pesan orang lain)
               if (!isMe)
-                GestureDetector(
-                  onTap: () => _navigateToProfile(msg['username']),
-                  child: FutureBuilder<String?>(
-                    future: _getUserAvatar(msg['username']),
-                    builder: (context, snapshot) {
-                      return Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        child: CircleAvatar(
-                          radius: 18,
-                          backgroundColor: _primaryPink.withOpacity(0.3),
-                          backgroundImage: snapshot.data != null
-                              ? FileImage(File(snapshot.data!))
-                              : null,
-                          child: snapshot.data == null
-                              ? Text(
-                                  msg['username'].isNotEmpty
-                                      ? msg['username'][0].toUpperCase()
-                                      : "?",
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                )
-                              : null,
-                        ),
-                      );
-                    },
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 2),
+                  child: GestureDetector(
+                    onTap: () => _navigateToProfile(msg['username']),
+                    child: Text(
+                      displayName,
+                      style: TextStyle(
+                        color: _whatsappGreen,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               
-              if (isMe) const Spacer(),
-              
-              Expanded(
+              // Bubble pesan
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isMe ? _bubbleMe : _bubbleOther,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(16),
+                    topRight: const Radius.circular(16),
+                    bottomLeft: Radius.circular(isMe ? 16 : 4),
+                    bottomRight: Radius.circular(isMe ? 4 : 16),
+                  ),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!isMe)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, bottom: 4),
-                        child: GestureDetector(
-                          onTap: () => _navigateToProfile(msg['username']),
-                          child: Text(
-                            displayName,
-                            style: TextStyle(
-                              color: _softPink,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    
                     if (hasReply)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border(left: BorderSide(color: _primaryPink, width: 3)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              msg['reply_to']['username'],
-                              style: TextStyle(
-                                color: _primaryPink,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              msg['reply_to']['message'] ?? '[Media]',
-                              style: const TextStyle(
-                                color: Colors.white60,
-                                fontSize: 11,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
+  Container(
+    margin: const EdgeInsets.only(bottom: 6),
+    padding: const EdgeInsets.all(8),
+    decoration: BoxDecoration(
+      color: Colors.white.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(10),
+      border: Border(left: BorderSide(color: _whatsappGreen, width: 3)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          msg['reply_to']['username'],
+          style: TextStyle(
+            color: _whatsappGreen,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          msg['reply_to']['message'] ?? '[Media]',
+          style: const TextStyle(
+            color: Colors.white60,
+            fontSize: 12,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    ),
+  ),
+                    
+                    // Pesan teks
+                    if (msg['message'] != null && msg['message'].toString().isNotEmpty)
+                      Text(
+                        msg['message'], 
+                        style: TextStyle(
+                          color: isMe ? _bubbleTextMe : _bubbleTextOther,
+                          fontSize: 14,
                         ),
                       ),
                     
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      constraints: BoxConstraints(
-                        minWidth: 60,
-                        maxWidth: MediaQuery.of(context).size.width * 0.70,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isMe ? _bubbleMe : _bubbleOther,
-                        borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(18),
-                          topRight: const Radius.circular(18),
-                          bottomLeft: Radius.circular(isMe ? 18 : 4),
-                          bottomRight: Radius.circular(isMe ? 4 : 18),
+                    // Media content
+                    if (hasMedia) _buildMediaContent(msg, mediaType),
+                    
+                    // Waktu
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          timeStr, 
+                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 10),
                         ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (msg['message'] != null && msg['message'].toString().isNotEmpty)
-                            Text(msg['message'], 
-                              style: const TextStyle(color: Colors.white, fontSize: 14),
-                            ),
-                          
-                          if (hasMedia) _buildMediaContent(msg, mediaType),
-                          
-                          const SizedBox(height: 2),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(msg['time'] ?? "", 
-                                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 10)),
-                              if (isMe)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 6),
-                                  child: Icon(Icons.done_all, color: Colors.white38, size: 12),
-                                ),
-                            ],
+                        if (isMe)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Icon(Icons.done_all, color: Colors.white38, size: 12),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              
-              if (isMe)
-                GestureDetector(
-                  onTap: () => _navigateToProfile(widget.username),
-                  child: FutureBuilder<String?>(
-                    future: _getUserAvatar(widget.username),
-                    builder: (context, snapshot) {
-                      return Container(
-                        margin: const EdgeInsets.only(left: 8),
-                        child: CircleAvatar(
-                          radius: 18,
-                          backgroundColor: _primaryPink.withOpacity(0.3),
-                          backgroundImage: snapshot.data != null
-                              ? FileImage(File(snapshot.data!))
-                              : null,
-                          child: snapshot.data == null
-                              ? Text(
-                                  widget.username.isNotEmpty
-                                      ? widget.username[0].toUpperCase()
-                                      : "?",
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                )
-                              : null,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              
-              if (!isMe) const Spacer(),
             ],
           ),
         ),
@@ -1132,15 +1069,15 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
         child: Padding(
           padding: const EdgeInsets.only(top: 6),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             child: Image.network(
               fullUrl,
-              width: 220,
-              height: 200,
+              width: 200,
+              height: 180,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => Container(
-                width: 220,
-                height: 200,
+                width: 200,
+                height: 180,
                 color: Colors.grey[900],
                 child: const Center(
                   child: Icon(Icons.broken_image, color: Colors.white54, size: 40),
@@ -1149,11 +1086,11 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
               loadingBuilder: (context, child, loadingProgress) {
                 if (loadingProgress == null) return child;
                 return Container(
-                  width: 220,
-                  height: 200,
+                  width: 200,
+                  height: 180,
                   color: Colors.grey[900],
                   child: const Center(
-                    child: CircularProgressIndicator(color: Color(0xFFFF4081)),
+                    child: CircularProgressIndicator(color: Color(0xFF25D366)),
                   ),
                 );
               },
@@ -1167,11 +1104,11 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
         child: Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Container(
-            width: 220,
-            height: 150,
+            width: 200,
+            height: 140,
             decoration: BoxDecoration(
               color: Colors.black54,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Stack(
               alignment: Alignment.center,
@@ -1199,7 +1136,7 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
       return Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Container(
-          width: 220,
+          width: 200,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: Colors.black26,
@@ -1211,27 +1148,27 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
                 onTap: () => _playAudio(mediaUrl),
                 child: Icon(
                   isPlaying ? Icons.stop_circle : Icons.play_circle_filled,
-                  color: _primaryPink,
-                  size: 36,
+                  color: _whatsappGreen,
+                  size: 32,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(msg['file_name'] ?? "Pesan suara",
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: const TextStyle(color: Colors.white70, fontSize: 11),
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (isPlaying)
-                      const LinearProgressIndicator(color: Color(0xFFFF4081)),
+                      const LinearProgressIndicator(color: Color(0xFF25D366)),
                   ],
                 ),
               ),
               GestureDetector(
                 onTap: () => _downloadFile(mediaUrl, msg['file_name'] ?? 'audio.m4a'),
-                child: const Icon(Icons.download, color: Colors.white54, size: 20),
+                child: const Icon(Icons.download, color: Colors.white54, size: 18),
               ),
             ],
           ),
@@ -1241,7 +1178,7 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
       return Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Container(
-          width: 220,
+          width: 200,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: Colors.black26,
@@ -1249,28 +1186,28 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
           ),
           child: Row(
             children: [
-              const Icon(Icons.insert_drive_file, color: Colors.white, size: 24),
-              const SizedBox(width: 10),
+              const Icon(Icons.insert_drive_file, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       msg['file_name'] ?? "File",
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: const TextStyle(color: Colors.white70, fontSize: 11),
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (msg['file_size'] != null)
                       Text(
                         msg['file_size'],
-                        style: const TextStyle(color: Colors.white38, fontSize: 10),
+                        style: const TextStyle(color: Colors.white38, fontSize: 9),
                       ),
                   ],
                 ),
               ),
               GestureDetector(
                 onTap: () => _downloadFile(mediaUrl, msg['file_name'] ?? 'file'),
-                child: const Icon(Icons.download, color: Colors.white54, size: 20),
+                child: const Icon(Icons.download, color: Colors.white54, size: 18),
               ),
             ],
           ),
@@ -1318,14 +1255,14 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F0A10),
-        border: Border(top: BorderSide(color: _primaryPink.withOpacity(0.2))),
+        color: const Color(0xFF1E1E1E),
+        border: Border(top: BorderSide(color: _whatsappGreen.withOpacity(0.2))),
       ),
       child: Row(
         children: [
           PopupMenuButton<String>(
-            icon: Icon(Icons.add_circle, color: _softPink, size: 28),
-            color: _bgDark,
+            icon: Icon(Icons.add_circle, color: _whatsappGreen, size: 28),
+            color: const Color(0xFF1E1E1E),
             onSelected: (value) {
               switch (value) {
                 case 'image': _pickImage(); break;
@@ -1348,29 +1285,29 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _isRecording ? Colors.red : _softPink.withOpacity(0.2),
+                color: _isRecording ? Colors.red : _whatsappGreen.withOpacity(0.2),
                 shape: BoxShape.circle,
               ),
               child: Icon(_isRecording ? Icons.mic : Icons.mic_none, 
-                color: _isRecording ? Colors.white : _softPink, size: 22),
+                color: _isRecording ? Colors.white : _whatsappGreen, size: 22),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: _primaryPink.withOpacity(0.3)),
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: _whatsappGreen.withOpacity(0.3)),
               ),
               child: TextField(
                 controller: _msgController,
                 style: const TextStyle(color: Colors.white),
-                cursorColor: _primaryPink,
+                cursorColor: _whatsappGreen,
                 decoration: InputDecoration(
                   hintText: "Ketik pesan...",
-                  hintStyle: TextStyle(color: _softPink.withOpacity(0.4)),
+                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
                   border: InputBorder.none,
                 ),
                 onSubmitted: (_) => _sendMessage(text: _msgController.text),
@@ -1383,7 +1320,7 @@ class _PublicChatPageState extends State<PublicChatPage> with WidgetsBindingObse
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _isSending ? Colors.grey : _primaryPink,
+                color: _isSending ? Colors.grey : _whatsappGreen,
                 shape: BoxShape.circle,
               ),
               child: Icon(_isSending ? Icons.hourglass_top_rounded : Icons.send_rounded, 
@@ -1460,7 +1397,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     aspectRatio: _controller.value.aspectRatio,
                     child: VideoPlayer(_controller),
                   )
-                : const CircularProgressIndicator(color: Color(0xFFFF4081)),
+                : const CircularProgressIndicator(color: Color(0xFF25D366)),
           ),
           if (_isInitialized)
             Positioned(
@@ -1470,7 +1407,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               child: Column(
                 children: [
                   VideoProgressIndicator(_controller, allowScrubbing: true,
-                    colors: const VideoProgressColors(playedColor: Color(0xFFFF4081))),
+                    colors: const VideoProgressColors(playedColor: Color(0xFF25D366))),
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1490,10 +1427,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                         },
                       ),
                       const SizedBox(width: 20),
-                      IconButton(
-                        icon: const Icon(Icons.fullscreen, color: Colors.white, size: 28),
-                        onPressed: () {},
-                      ),
                     ],
                   ),
                 ],
